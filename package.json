@@ -1,61 +1,19 @@
-# Guía rápida: publicar Pensamiento crítico con link
-
-Esta carpeta está preparada para subir la app a Render y obtener un link público tipo:
-
-https://pensamiento-critico.onrender.com
-
-## Qué necesitás
-
-1. Una cuenta en GitHub.
-2. Una cuenta en Render.
-3. Opcional: API key de OpenAI con crédito si querés IA real.
-
-La app también funciona en modo demo si dejás `OPENAI_API_KEY` vacío.
-
-## Paso 1: subir la carpeta a GitHub
-
-1. Entrá a GitHub.
-2. Creá un repositorio nuevo, por ejemplo: `pensamiento-critico`.
-3. Subí todos los archivos de esta carpeta.
-4. No subas el archivo `.env`.
-5. No subas `node_modules`.
-
-Esta carpeta ya trae `.gitignore` para evitar subir esos archivos.
-
-## Paso 2: crear el servicio en Render
-
-1. Entrá a Render.
-2. Tocá `New`.
-3. Elegí `Web Service`.
-4. Conectá tu repositorio de GitHub.
-5. Configurá:
-   - Language: Node
-   - Build Command: `npm install`
-   - Start Command: `npm start`
-   - Instance Type: Free
-
-## Paso 3: variables de entorno
-
-En Render, entrá a Environment y agregá:
-
-OPENAI_MODEL=gpt-5-mini
-
-Para modo demo:
-OPENAI_API_KEY=
-
-Para IA real:
-OPENAI_API_KEY=sk-proj-tu_clave_real
-
-No pegues tu clave en GitHub.
-
-## Paso 4: obtener el link
-
-Cuando Render termine de desplegar, te va a dar una URL pública.
-
-Compartí ese link con tus compañeros, docentes o en clase.
-
-## Importante
-
-- Si usás el plan gratis de Render, la app puede dormirse después de estar inactiva. Al entrar de nuevo puede tardar alrededor de un minuto en despertar.
-- Si usás IA real, la API de OpenAI se cobra aparte.
-- Si dejás la API key vacía, la app funciona en modo demo.
+{
+  "name": "pensamiento-critico",
+  "version": "1.0.0",
+  "description": "App web para revisar pensamientos y conversar sobre estados de ánimo.",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "express": "^4.19.2",
+    "openai": "^5.0.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
