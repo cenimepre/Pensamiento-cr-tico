@@ -1,0 +1,580 @@
+import "dotenv/config";
+import express from "express";
+import OpenAI from "openai";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+const MODEL = process.env.OPENAI_MODEL || "gpt-5-mini";
+
+app.use(express.json({ limit: "1mb" }));
+app.use(express.static(path.join(__dirname, "public")));
+
+app.get("/health", (req, res) => {
+  res.status(200).json({ ok: true, app: "pensamiento-critico" });
+});
+
+const client = process.env.OPENAI_API_KEY
+  ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+  : null;
+
+const crisisPatterns = [
+  "me quiero morir",
+  "quiero morirme",
+  "quiero morir",
+  "quiero matarme",
+  "voy a matarme",
+  "me voy a matar",
+  "quiero suicidarme",
+  "voy a suicidarme",
+  "me quiero suicidar",
+  "quiero hacerme daño",
+  "voy a hacerme daño",
+  "me voy a hacer daño",
+  "quiero lastimarme",
+  "voy a lastimarme",
+  "no quiero vivir",
+  "quiero dejar de vivir",
+  "quiero desaparecer",
+  "quiero hacerle daño",
+  "voy a hacerle daño",
+  "quiero matar a",
+  "voy a matar a"
+];
+
+const crisisNegationPatterns = [
+  "no me quiero morir",
+  "no quiero morirme",
+  "no quiero morir",
+  "no quiero matarme",
+  "no voy a matarme",
+  "no me voy a matar",
+  "no quiero suicidarme",
+  "no voy a suicidarme",
+  "no me quiero suicidar",
+  "no quiero hacerme daño",
+  "no voy a hacerme daño",
+  "no me voy a hacer daño",
+  "no quiero lastimarme",
+  "no voy a lastimarme",
+  "no quiero atentar contra mi vida",
+  "no queria atentar contra mi vida",
+  "no quería atentar contra mi vida",
+  "no voy a atentar contra mi vida",
+  "no tengo intencion de hacerme daño",
+  "no tengo intención de hacerme daño",
+  "no tengo ideas suicidas",
+  "no quiero hacerle daño",
+  "no voy a hacerle daño",
+  "no quiero matar a",
+  "no voy a matar a"
+];
+
+const URUGUAY_HELP_LINES = `
+Ayuda en Uruguay:
+- Emergencia inmediata: 911.
+- Prevención del suicidio / Línea Vida: 0800 0767 o *0767.
+- Apoyo emocional: 0800 1920.
+- Contención por uso problemático de drogas: *1020.
+Según el Ministerio de Salud Pública, las líneas de prevención del suicidio, apoyo emocional y contención en uso problemático de drogas son gratuitas y atienden 24 horas todos los días.
+`;
+
+const SYSTEM_PROMPT = `
+Sos "Pensamiento crítico", una IA de apoyo para revisar pensamientos y conversar sobre cómo se siente una persona.
+No sos terapeuta, no diagnosticás, no reemplazás atención profesional y no prometés curar ansiedad.
+
+Idea central:
+La app no es solo para ansiedad. Una persona puede sentirse feliz, entusiasmada, tranquila o esperanzada y aun así tener pensamientos exagerados, impulsivos, todo-o-nada o poco realistas. Trabajá con cualquier emoción sin patologizarla.
+
+Tu identidad:
+Sos una voz que acompaña sin alimentar la película mental. No contradecís de golpe, pero tampoco dejás que el pensamiento automático mande solo.
+Tu tarea es ayudar a la persona a sentirse entendida, ordenar lo que cuenta y encontrar un siguiente paso creíble.
+
+Objetivo:
+Ayudar a separar:
+- qué pasó,
+- qué piensa,
+- qué siente,
+- qué evidencia hay,
+- qué parte puede ser interpretación,
+- qué alternativa de pensamiento puede creer,
+- qué acción pequeña podría ayudar.
+
+Reglas de tono:
+- Español rioplatense claro, cálido y natural.
+- No suenes como formulario.
+- No uses siempre la misma estructura.
+- No respondas con listas largas salvo que realmente ayuden.
+- No minimices con frases como "no pasa nada".
+- No afirmes que todo va a salir bien si no hay evidencia.
+- No confirmes miedos o euforia como hechos.
+- No inventes información.
+- Usá frases como "con lo que contás", "no se puede confirmar", "una posibilidad es".
+- Si el tono es "directo", sé claro y breve, pero no brusco.
+- Si el tono es "suave", priorizá contención.
+- Si el tono es "acompañamiento", respondé como conversación paso a paso.
+
+Modos:
+1. contención: primero calmar, validar y ordenar.
+2. análisis: separar hecho, interpretación, evidencia y patrón.
+3. acción: resolver qué hacer ahora con pasos concretos.
+4. conversación: hacer una pregunta útil antes de cerrar.
+5. automático: elegí el modo más útil.
+
+Patrones de pensamiento posibles:
+- catastrofización,
+- lectura de mente,
+- adivinación del futuro,
+- pensamiento todo o nada,
+- filtro negativo,
+- descalificar lo positivo,
+- culpa excesiva,
+- razonamiento emocional.
+
+Qué debe tener una buena respuesta:
+- Una primera frase que conecte emocionalmente.
+- El miedo, deseo o necesidad de fondo, si se puede inferir sin inventar.
+- Dato vs interpretación, en lenguaje simple.
+- Un patrón posible, solo si aplica.
+- Alternativas creíbles, no positivismo falso.
+- Una acción concreta y pequeña.
+- Si corresponde, un mensaje sugerido.
+- Si el historial muestra repetición, explicalo de forma humana: "parece que cuando pasa X, tu mente salta a Y".
+- Si no hay historial suficiente, no inventes patrón.
+
+Formato:
+Elegí entre 3 y 5 bloques como máximo.
+Podés usar títulos, pero no siempre los mismos.
+Terminá con una frase corta que la persona pueda repetirse.
+
+Crisis:
+Si hay riesgo de autolesión, suicidio, violencia o daño a terceros, no hagas reestructuración. Priorizá ayuda inmediata e incluí estas líneas:
+${URUGUAY_HELP_LINES}
+`;
+
+app.post("/api/chat", async (req, res) => {
+  const payload = req.body || {};
+  const message = buildUserMessage(payload);
+
+  res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+  res.setHeader("Cache-Control", "no-cache, no-transform");
+  res.setHeader("Connection", "keep-alive");
+  res.flushHeaders?.();
+
+  if (containsCrisis(message)) {
+    return streamText(res, crisisMessage());
+  }
+
+  if (!client) {
+    return streamText(res, demoResponse(payload));
+  }
+
+  try {
+    const stream = await client.responses.create({
+      model: MODEL,
+      instructions: SYSTEM_PROMPT,
+      input: [
+        {
+          role: "user",
+          content: message
+        }
+      ],
+      stream: true
+    });
+
+    let full = "";
+
+    for await (const event of stream) {
+      if (event.type === "response.output_text.delta" && event.delta) {
+        full += event.delta;
+        sendEvent(res, { type: "delta", text: event.delta });
+      }
+
+      if (event.type === "response.completed") {
+        sendEvent(res, { type: "done", text: full });
+        return res.end();
+      }
+
+      if (event.type === "error") {
+        sendEvent(res, {
+          type: "error",
+          text: "La IA devolvió un error durante la respuesta."
+        });
+        return res.end();
+      }
+    }
+
+    sendEvent(res, { type: "done", text: full });
+    res.end();
+  } catch (error) {
+    console.error(error);
+    streamText(
+      res,
+      "No pude conectar con la IA en este momento. Revisá que tu OPENAI_API_KEY tenga saldo/cuota disponible y que el modelo elegido exista para tu cuenta. Mientras tanto, podés usar el análisis local de patrones de la app."
+    );
+  }
+});
+
+function buildUserMessage(payload) {
+  const profile = payload.profileName || "Usuario sin nombre";
+  const situation = payload.situation || "";
+  const before = payload.before || "";
+  const thought = payload.thought || "";
+  const evidence = payload.evidence || "";
+  const emotion = payload.emotion || "";
+  const intensity = payload.intensity || "";
+  const supportMode = payload.supportMode || "automático";
+  const responseTone = payload.responseTone || "acompañamiento";
+  const patterns = payload.patterns || {};
+  const recentHistory = payload.recentHistory || [];
+
+  return `
+Perfil: ${profile}
+
+La persona completó este registro:
+
+Qué sucedió:
+${situation}
+
+Qué había pasado antes o contexto:
+${before}
+
+Pensamiento que apareció:
+${thought}
+
+Evidencia que cree tener:
+${evidence}
+
+Emoción principal:
+${emotion}
+
+Intensidad:
+${intensity}/100
+
+Análisis dinámico local de patrones recurrentes:
+${JSON.stringify(patterns, null, 2)}
+
+Últimos registros de esta misma persona:
+${JSON.stringify(recentHistory, null, 2)}
+
+Respondé como "Pensamiento crítico" siguiendo el formato indicado.
+`;
+}
+
+function containsCrisis(text) {
+  const lower = normalize(text);
+
+  // Si la persona está negando explícitamente el riesgo, no activamos el mensaje de crisis.
+  // Ej: "no quiero hacerme daño" o "no quería atentar contra mi vida".
+  if (crisisNegationPatterns.some((pattern) => lower.includes(normalize(pattern)))) {
+    const positiveWithoutNegation = crisisPatterns.some((pattern) => {
+      const normalizedPattern = normalize(pattern);
+      const index = lower.indexOf(normalizedPattern);
+      if (index === -1) return false;
+      const contextBefore = lower.slice(Math.max(0, index - 28), index);
+      return !/\b(no|nunca|jamas|jamás|sin)\b/.test(contextBefore);
+    });
+
+    return positiveWithoutNegation && !lower.includes("no ");
+  }
+
+  return crisisPatterns.some((pattern) => {
+    const normalizedPattern = normalize(pattern);
+    const index = lower.indexOf(normalizedPattern);
+    if (index === -1) return false;
+
+    const contextBefore = lower.slice(Math.max(0, index - 32), index);
+    const isNegated = /\b(no|nunca|jamas|jamás|sin)\b/.test(contextBefore);
+
+    return !isNegated;
+  });
+}
+
+function normalize(text) {
+  return String(text)
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
+function crisisMessage() {
+  return `### Esto parece más urgente que un ejercicio de pensamiento
+
+Por lo que escribiste, parece haber una señal afirmativa de riesgo. Si no era eso y estabas diciendo que NO querés hacerte daño, podés volver a escribirlo y la app debería seguir conversando normalmente.
+
+Si hay riesgo de que te hagas daño, de que dañes a otra persona, o sentís que no podés mantenerte a salvo, buscá ayuda inmediata.
+
+${URUGUAY_HELP_LINES}
+
+También podés contactar a una persona de confianza y no quedarte sola/o con esto.`;
+}
+
+function demoResponse(payload) {
+  const situation = payload.situation || "la situación que contaste";
+  const before = payload.before || "";
+  const thought = payload.thought || "el peor escenario";
+  const evidence = payload.evidence || "no escribiste evidencia directa";
+  const emotion = payload.emotion || "ansiedad";
+  const supportMode = payload.supportMode || "automático";
+  const responseTone = payload.responseTone || "acompañamiento";
+  const patterns = payload.patterns || {};
+  const topPattern = patterns?.dynamicPatterns?.[0];
+  const topDistortion = patterns?.topDistortions?.[0]?.label;
+  const backgroundFear = inferBackgroundFear(`${situation} ${before} ${thought}`);
+  const action = suggestAction(`${situation} ${thought}`, supportMode);
+
+  const opener = responseTone === "directo"
+    ? "Vamos a separar esto sin darle más poder del que tiene."
+    : responseTone === "suave"
+      ? "Tiene sentido que esto te haya movido algo por dentro. Vamos despacio, sin tratar el miedo como si fuera una prueba."
+      : "Ok, paremos un segundo. Tu cabeza parece estar armando una película muy rápido; vamos a mirar qué parte es dato y qué parte es miedo.";
+
+  return `### Vamos despacio
+
+${opener}
+
+Con lo que contás, pasó esto: **${situation}**. El pensamiento que apareció fue: **“${thought}”**.
+
+### Lo que parece estar doliendo
+
+El miedo de fondo podría ser: **${backgroundFear}**. No lo tomo como una verdad, sino como una pista de lo que tu ansiedad está intentando proteger.
+
+### Dato vs película mental
+
+**Dato real:** ${situation}.  
+**Contexto:** ${before || "no agregaste contexto previo"}.  
+**Evidencia disponible:** ${evidence}.  
+**Película mental:** que “${thought}” ya es un hecho confirmado.
+
+Con lo que escribiste, eso todavía no se puede confirmar.
+
+### Patrón de pensamiento posible
+
+${topDistortion ? `Esto se parece a **${topDistortion}**.` : "Podría haber catastrofización, adivinación del futuro o razonamiento emocional, pero con pocos datos no conviene etiquetarlo demasiado."}
+
+${topPattern ? `Además, tu historial empieza a mostrar algo alrededor de: **${topPattern.label}**. No es diagnóstico; es una pista para observar.` : "Todavía no hay suficiente historial para hablar de un patrón personal claro."}
+
+### Una forma más creíble de pensarlo
+
+1. “Esto me preocupa, pero preocupación no es evidencia.”
+2. “Puedo hacerme cargo de lo que pasó sin asumir automáticamente el peor final.”
+3. “Todavía necesito una respuesta real antes de creerle a esta conclusión.”
+
+### Qué podés hacer ahora
+
+${action}
+
+Frase para repetir ahora: **“No necesito resolver toda la película; necesito volver al dato y dar el próximo paso.”**
+
+> Modo demo: esta respuesta se generó sin IA externa.`;
+}
+
+function inferBackgroundFear(text) {
+  const lower = normalize(text);
+
+  if (lower.includes("jefe") || lower.includes("desped") || lower.includes("trabajo")) {
+    return "que un error te quite valor o seguridad en el trabajo";
+  }
+
+  if (lower.includes("visto") || lower.includes("mensaje") || lower.includes("responde")) {
+    return "que el silencio signifique rechazo o abandono";
+  }
+
+  if (lower.includes("cliente") || lower.includes("precio") || lower.includes("comprar")) {
+    return "que una falta de respuesta signifique que tu trabajo no vale";
+  }
+
+  if (lower.includes("examen") || lower.includes("prueba") || lower.includes("materia")) {
+    return "que un resultado puntual confirme que no vas a poder";
+  }
+
+  return "que esta situación confirme algo negativo sobre vos o sobre lo que puede pasar";
+}
+
+function suggestAction(text, supportMode) {
+  const lower = normalize(text);
+
+  if (supportMode === "contención") {
+    return "Antes de decidir nada, bajá la intensidad: escribí tres datos reales, respirà lento un minuto y recién después pensá si hay algo que responder o resolver.";
+  }
+
+  if (lower.includes("jefe") || lower.includes("trabajo") || lower.includes("desped")) {
+    return `Si necesitás actuar, podés escribir algo simple: “Quería aclarar lo que pasó y saber si necesitás que haga algo más para resolverlo.” No te justifiques de más; mostrás responsabilidad sin castigarte.`;
+  }
+
+  if (lower.includes("visto") || lower.includes("mensaje") || lower.includes("responde")) {
+    return "Esperá un tiempo concreto antes de volver a escribir. Mientras tanto, anotá qué datos reales tenés y qué parte está completando tu ansiedad.";
+  }
+
+  return "Elegí una acción de menos de cinco minutos: pedir un dato, ordenar lo que pasó o escribir una respuesta breve. La idea no es resolver toda la ansiedad, sino salir del bucle.";
+}
+
+function streamText(res, text) {
+  const chunks = text.match(/.{1,90}(\s|$)/g) || [text];
+
+  let index = 0;
+  const interval = setInterval(() => {
+    if (index < chunks.length) {
+      sendEvent(res, { type: "delta", text: chunks[index] });
+      index += 1;
+    } else {
+      clearInterval(interval);
+      sendEvent(res, { type: "done", text });
+      res.end();
+    }
+  }, 35);
+}
+
+function sendEvent(res, data) {
+  res.write(`data: ${JSON.stringify(data)}\n\n`);
+}
+
+
+app.post("/api/feelings-chat", async (req, res) => {
+  const payload = req.body || {};
+  const message = buildFeelingsMessage(payload);
+
+  res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+  res.setHeader("Cache-Control", "no-cache, no-transform");
+  res.setHeader("Connection", "keep-alive");
+  res.flushHeaders?.();
+
+  if (containsCrisis(message)) {
+    return streamText(res, crisisMessage());
+  }
+
+  if (!client) {
+    return streamText(res, demoFeelingsResponse(payload));
+  }
+
+  try {
+    const stream = await client.responses.create({
+      model: MODEL,
+      instructions: FEELINGS_CHAT_PROMPT,
+      input: [
+        {
+          role: "user",
+          content: message
+        }
+      ],
+      stream: true
+    });
+
+    let full = "";
+
+    for await (const event of stream) {
+      if (event.type === "response.output_text.delta" && event.delta) {
+        full += event.delta;
+        sendEvent(res, { type: "delta", text: event.delta });
+      }
+
+      if (event.type === "response.completed") {
+        sendEvent(res, { type: "done", text: full });
+        return res.end();
+      }
+
+      if (event.type === "error") {
+        sendEvent(res, {
+          type: "error",
+          text: "La IA devolvió un error durante la conversación."
+        });
+        return res.end();
+      }
+    }
+
+    sendEvent(res, { type: "done", text: full });
+    res.end();
+  } catch (error) {
+    console.error(error);
+    streamText(
+      res,
+      demoFeelingsResponse(payload)
+    );
+  }
+});
+
+const FEELINGS_CHAT_PROMPT = `
+Sos la parte conversacional de "Pensamiento crítico".
+La persona viene a charlar sobre cómo se siente, no necesariamente a completar un ejercicio.
+No sos terapeuta, no diagnosticás y no reemplazás ayuda profesional.
+
+Respondé como una conversación:
+- cálida,
+- natural,
+- breve,
+- con una pregunta útil al final cuando tenga sentido.
+No uses plantillas largas.
+No conviertas todo en ansiedad: puede haber alegría, entusiasmo, calma, tristeza, bronca, orgullo, esperanza o confusión.
+Si aparece un pensamiento exagerado, ayudá a mirarlo sin apagar la emoción.
+
+Si hay riesgo de autolesión, suicidio o daño a terceros, priorizá seguridad e incluí:
+${URUGUAY_HELP_LINES}
+`;
+
+function buildFeelingsMessage(payload) {
+  const profile = payload.profileName || "Usuario";
+  const message = payload.message || "";
+  const emotion = payload.emotion || "";
+  const tone = payload.responseTone || "acompañamiento";
+  const conversation = payload.conversation || [];
+  const recentHistory = payload.recentHistory || [];
+
+  return `
+Perfil: ${profile}
+Emoción elegida: ${emotion}
+Tono elegido: ${tone}
+
+Mensaje actual:
+${message}
+
+Conversación reciente:
+${JSON.stringify(conversation.slice(-8), null, 2)}
+
+Registros recientes del ejercicio de pensamientos:
+${JSON.stringify(recentHistory.slice(0, 5), null, 2)}
+
+Respondé de forma conversacional, sin plantilla rígida.
+`;
+}
+
+function demoFeelingsResponse(payload) {
+  const message = payload.message || "lo que estás sintiendo";
+  const emotion = payload.emotion || "lo que sentís";
+  const lower = normalize(message);
+
+  if (lower.includes("feliz") || lower.includes("content") || emotion === "felicidad" || emotion === "alegría") {
+    return `Me gusta que también traigas algo positivo. Estar feliz no significa que haya que apagar la cabeza: a veces la emoción sube tanto que aparecen pensamientos exagerados tipo “ahora todo va a salir perfecto” o “tengo que hacer todo ya”.
+
+Podés disfrutarlo y a la vez preguntarte: ¿qué parte de esto es entusiasmo real y qué parte es impulso?
+
+¿Qué te gustaría hacer con esa emoción: celebrarla, compartirla o tomar una decisión?`;
+  }
+
+  if (lower.includes("no sé") || lower.includes("no se") || emotion === "confusión") {
+    return `Tiene sentido que no lo tengas claro todavía. A veces intentar entender todo de golpe solo agrega más ruido.
+
+Podemos empezar más simple: no hace falta resolverlo ahora, solo ubicarlo. ¿Esto se siente más como tristeza, miedo, enojo, cansancio o mezcla de varias cosas?`;
+  }
+
+  if (lower.includes("enojo") || emotion === "enojo" || emotion === "frustración") {
+    return `El enojo suele aparecer cuando algo se siente injusto, invasivo o demasiado. No hay que negarlo, pero tampoco dejar que decida solo.
+
+Antes de actuar, capaz sirve preguntarte: ¿qué límite o necesidad está intentando defender este enojo?`;
+  }
+
+  return `Te leo. Con lo que contás, parece que hay algo que necesita espacio antes de convertirlo en conclusión.
+
+No tengo que darte una solución instantánea. Podemos ir de a poco: ¿querés que te ayude a ordenar lo que sentís, a entender qué pensamiento aparece detrás, o a pensar qué hacer ahora?`;
+}
+
+
+app.listen(PORT, () => {
+  console.log(`Pensamiento crítico activo en http://localhost:${PORT}`);
+  if (!process.env.OPENAI_API_KEY) {
+    console.log("Modo demo: no se encontró OPENAI_API_KEY en .env");
+  }
+});

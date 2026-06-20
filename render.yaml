@@ -1,0 +1,10 @@
+# Copiá este archivo y renombralo a .env
+# Pegá tu API key real acá. No subas este archivo a internet.
+
+OPENAI_API_KEY=tu_api_key_aqui
+
+# Podés cambiar el modelo si querés.
+OPENAI_MODEL=gpt-5-mini
+
+# Puerto local de la app
+PORT=3000
