@@ -64,8 +64,7 @@
           <p class="eyebrow">Emociones · evidencia · alternativas</p>
           <h1>Pensamiento crítico</h1>
           <p class="subtitle">
-            Contá qué pasó, qué pensaste y cómo te sentís. La app te acompaña a separar hechos,
-            interpretación y alternativas de pensamiento.
+            Contá qué pasó, qué pensaste y cómo te sentís. Al tocar “Analizar pensamiento”, la app baja automáticamente a la respuesta.
           </p>
         </div>
 
@@ -158,7 +157,25 @@
         </p>
       </section>
 
+      <!-- La respuesta queda inmediatamente debajo del formulario para que el usuario la vea al analizar. -->
+      <section class="chat-section">
+        <div class="chat-header">
+          <div>
+            <p class="eyebrow">Respuesta</p>
+            <h2>Desarme del pensamiento</h2>
+          </div>
+          <span id="aiStatus" class="status-pill">Lista</span>
+        </div>
 
+        <div id="chatOutput" class="chat-output">
+          <div class="empty-state">
+            <span>💭</span>
+            <p>Escribí una situación y elegí qué necesitás ahora.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Resúmenes y conversación libre quedan después, para no interrumpir el flujo principal. -->
       <section class="simple-summary-section">
         <div class="simple-summary-header">
           <div>
@@ -178,7 +195,6 @@
           </div>
         </div>
       </section>
-
       <section class="feelings-chat-section">
         <div class="chat-header">
           <div>
@@ -204,22 +220,9 @@
         </div>
       </section>
 
-      <section class="chat-section">
-        <div class="chat-header">
-          <div>
-            <p class="eyebrow">Respuesta</p>
-            <h2>Desarme del pensamiento</h2>
-          </div>
-          <span id="aiStatus" class="status-pill">Lista</span>
-        </div>
 
-        <div id="chatOutput" class="chat-output">
-          <div class="empty-state">
-            <span>💭</span>
-            <p>Escribí una situación y elegí qué necesitás ahora.</p>
-          </div>
-        </div>
-      </section>
+
+
     </section>
   </main>
 

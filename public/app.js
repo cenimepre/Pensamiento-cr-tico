@@ -11,6 +11,7 @@ const intensityValue = document.querySelector("#intensityValue");
 const sendBtn = document.querySelector("#sendBtn");
 const exampleBtn = document.querySelector("#exampleBtn");
 const chatOutput = document.querySelector("#chatOutput");
+const chatSection = document.querySelector(".chat-section");
 const aiStatus = document.querySelector("#aiStatus");
 const patternsPanel = document.querySelector("#patternsPanel");
 const historyList = document.querySelector("#historyList");
@@ -279,9 +280,30 @@ function collectPayload() {
   };
 }
 
+function scrollToAIResponse() {
+  if (!chatSection) return;
+
+  requestAnimationFrame(() => {
+    chatSection.scrollIntoView({
+      behavior: "smooth",
+      block: "start"
+    });
+  });
+}
+
 async function streamAIResponse(payload) {
   setStatus("Acompañando…", "loading");
-  chatOutput.innerHTML = `<div class="chat-message" id="currentMessage"></div>`;
+  const originalButtonText = sendBtn.textContent;
+  sendBtn.disabled = true;
+  sendBtn.textContent = "Analizando…";
+  chatOutput.innerHTML = `
+    <div class="chat-message" id="currentMessage">
+      <p><strong>Analizando tu pensamiento...</strong></p>
+      <p>Estoy preparando una respuesta. En unos segundos aparece acá.</p>
+    </div>
+  `;
+  scrollToAIResponse();
+
   const currentMessage = document.querySelector("#currentMessage");
   let fullText = "";
 
@@ -334,6 +356,9 @@ async function streamAIResponse(payload) {
     const fallback = buildLocalFallback(payload);
     currentMessage.innerHTML = formatMarkdown(fallback);
     setStatus("Modo local", "error");
+  } finally {
+    sendBtn.disabled = false;
+    sendBtn.textContent = originalButtonText;
   }
 }
 
@@ -926,6 +951,7 @@ Esto se activa solo cuando la app interpreta una señal afirmativa de riesgo. Si
 Si hay riesgo de que te hagas daño o de que dañes a otra persona, buscá ayuda inmediata: llamá a emergencias locales, contactá a alguien de confianza o acercate a un servicio de salud.
 
 No tenés que resolver esto desde una app.`);
+  scrollToAIResponse();
 }
 
 async function sendFeelingsMessage() {
